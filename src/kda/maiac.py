@@ -14,6 +14,7 @@ is deleted:
 import json
 import os
 import tempfile
+import threading
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import date, datetime, timedelta
 
@@ -29,6 +30,9 @@ LAADS = "https://ladsweb.modaps.eosdis.nasa.gov/archive/allData/61/MCD19A2"
 LPCLOUD = "https://data.lpdaac.earthdatacloud.nasa.gov/lp-prod-protected/MCD19A2.061"
 FILL = -28672
 SCALE = 0.001
+
+# The HDF4 library is not thread-safe: downloads run in parallel, reads one at a time.
+_READ = threading.Lock()
 
 INDEX = C.RAW / "maiac_index.json"
 DAILY = C.INTERIM / "maiac_daily"
@@ -73,12 +77,20 @@ def build_index(end=None, refresh=False):
             return d, None  # day not processed yet
         return d, {t: n for n in names for t in C.MAIAC_TILES if f".{t}." in n}
 
-    with ThreadPoolExecutor(8) as ex:
-        for d, files in ex.map(one, todo):
+    INDEX.parent.mkdir(parents=True, exist_ok=True)
+
+    def save():
+        INDEX.write_text(json.dumps(dict(sorted(idx.items())), indent=0))
+
+    print(f"MAIAC index: {len(todo)} days to list", flush=True)
+    with ThreadPoolExecutor(16) as ex:
+        for k, (d, files) in enumerate(ex.map(one, todo), 1):
             if files is not None and len(files) == len(C.MAIAC_TILES):
                 idx[d.isoformat()] = files
-    INDEX.parent.mkdir(parents=True, exist_ok=True)
-    INDEX.write_text(json.dumps(dict(sorted(idx.items())), indent=0))
+            if k % 250 == 0:
+                save()
+                print(f"  index {k}/{len(todo)}", flush=True)
+    save()
     return idx
 
 
@@ -111,11 +123,12 @@ def _download(session, name, dest):
 
 def reduce_file(path, tile):
     """One tile-day -> (sum, count) on the target grid, and per-site overpass rows."""
-    f = SD(str(path), SDC.READ)
-    aod = f.select("Optical_Depth_055")[:].astype(np.float32)
-    qa = f.select("AOD_QA")[:]
-    orbits = parse_orbits(f.attributes()["Orbit_time_stamp"])
-    f.end()
+    with _READ:
+        f = SD(str(path), SDC.READ)
+        aod = f.select("Optical_Depth_055")[:].astype(np.float32)
+        qa = f.select("AOD_QA")[:]
+        orbits = parse_orbits(f.attributes()["Orbit_time_stamp"])
+        f.end()
 
     ok = best_quality(qa) & (aod != FILL)
     aod = np.where(ok, aod * SCALE, np.nan)
@@ -189,17 +202,21 @@ def run(workers=6, end=None):
         if sp.exists():
             site_rows = pd.read_parquet(sp).to_dict("records")
         todo = [d for d in days if d not in done]
-        print(f"MAIAC {y}: {len(todo)} days to process")
+        print(f"MAIAC {y}: {len(todo)} days to process", flush=True)
         with tempfile.TemporaryDirectory(dir=C.RAW) as tmp, ThreadPoolExecutor(workers) as ex:
             futs = [ex.submit(process_day, session, d, idx[d], Path(tmp)) for d in todo]
             for k, fu in enumerate(as_completed(futs), 1):
-                d, daily, n, rows = fu.result()
+                try:
+                    d, daily, n, rows = fu.result()
+                except Exception as e:  # logged; the day is retried on the next run
+                    print(f"  FAILED day: {e!r}"[:300], flush=True)
+                    continue
                 done[d] = (daily, n)
                 site_rows += rows
                 if k % 50 == 0 or k == len(futs):
                     _save_year(out, done)
                     pd.DataFrame(site_rows).to_parquet(sp)
-                    print(f"  {y}: {k}/{len(futs)}")
+                    print(f"  {y}: {k}/{len(futs)}", flush=True)
         _save_year(out, done)
         pd.DataFrame(site_rows).to_parquet(sp)
 
