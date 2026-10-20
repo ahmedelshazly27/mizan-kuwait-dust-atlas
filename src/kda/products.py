@@ -3,7 +3,6 @@ the soiling-exposure index, and the files people download."""
 
 import hashlib
 import json
-import zipfile
 
 import geopandas as gpd
 import numpy as np

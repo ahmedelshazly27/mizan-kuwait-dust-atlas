@@ -12,7 +12,6 @@ is deleted:
 """
 
 import json
-import os
 import tempfile
 import threading
 from concurrent.futures import ThreadPoolExecutor, as_completed
@@ -24,6 +23,7 @@ import requests
 from pyhdf.SD import SD, SDC
 
 from . import config as C
+from . import http
 from . import grid
 
 LAADS = "https://ladsweb.modaps.eosdis.nasa.gov/archive/allData/61/MCD19A2"
@@ -56,8 +56,11 @@ def parse_orbits(stamp):
 # ---------------------------------------------------------------- discovery
 
 
+_LIST = http.session(token=False)
+
+
 def _list(url):
-    r = requests.get(url + ".json", timeout=120)
+    r = _LIST.get(url + ".json", timeout=120)
     r.raise_for_status()
     d = r.json()
     return d.get("content", d) if isinstance(d, dict) else d
@@ -98,9 +101,7 @@ def build_index(end=None, refresh=False):
 
 
 def _session():
-    s = requests.Session()
-    s.headers["Authorization"] = "Bearer " + os.environ["EARTHDATA_TOKEN"].strip()
-    return s
+    return http.session()
 
 
 def _download(session, name, dest):

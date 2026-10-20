@@ -5,7 +5,6 @@ global monthly file (~84 MB) is cut to the Kuwait box and deleted. Needs
 EARTHDATA_TOKEN and the GES DISC application approved on that account.
 """
 
-import os
 import re
 import tempfile
 from concurrent.futures import ThreadPoolExecutor
@@ -17,6 +16,7 @@ import requests
 import xarray as xr
 
 from . import config as C
+from . import http
 
 BASE = "https://goldsmr4.gesdisc.eosdis.nasa.gov/data/MERRA2_MONTHLY/M2TMNXAER.5.12.4"
 OUT = C.INTERIM / "merra2_kuwait_monthly.nc"
@@ -27,9 +27,7 @@ BOX = dict(lat=slice(27.5, 31.0), lon=slice(45.5, 49.5))
 
 
 def _session():
-    s = requests.Session()
-    s.headers["Authorization"] = "Bearer " + os.environ["EARTHDATA_TOKEN"].strip()
-    return s
+    return http.session()
 
 
 def _files(session):

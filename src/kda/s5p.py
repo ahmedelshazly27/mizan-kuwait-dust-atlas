@@ -9,7 +9,6 @@ so only Kuwait pixels are downloaded. Needs EARTHDATA_TOKEN, and the Copernicus
 Sentinel data licence accepted on that Earthdata account.
 """
 
-import os
 import re
 import tempfile
 import threading
@@ -18,10 +17,10 @@ from pathlib import Path
 
 import numpy as np
 import pandas as pd
-import requests
 import xarray as xr
 
 from . import config as C
+from . import http
 
 HARMONY = "https://harmony.earthdata.nasa.gov"
 COLLECTION = "C2087131083-GES_DISC"  # S5P_L2__AER_AI_HiR version 2
@@ -39,9 +38,7 @@ def axes():
 
 
 def _session():
-    s = requests.Session()
-    s.headers["Authorization"] = "Bearer " + os.environ["EARTHDATA_TOKEN"].strip()
-    return s
+    return http.session()
 
 
 def _submit(s, t0, t1):
