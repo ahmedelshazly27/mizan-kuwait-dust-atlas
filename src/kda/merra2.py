@@ -8,7 +8,6 @@ EARTHDATA_TOKEN and the GES DISC application approved on that account.
 import os
 import re
 import tempfile
-import threading
 from concurrent.futures import ThreadPoolExecutor
 from datetime import date
 from pathlib import Path
@@ -23,8 +22,8 @@ BASE = "https://goldsmr4.gesdisc.eosdis.nasa.gov/data/MERRA2_MONTHLY/M2TMNXAER.5
 OUT = C.INTERIM / "merra2_kuwait_monthly.nc"
 VARS = ["TOTEXTTAU", "DUEXTTAU"]
 BOX = dict(lat=slice(27.5, 31.0), lon=slice(45.5, 49.5))
-# The netCDF/HDF5 library is not thread-safe: downloads run in parallel, reads one at a time.
-_READ = threading.Lock()
+# The netCDF/HDF5 library is not thread-safe: worker threads only download;
+# every read and write happens in the main thread.
 
 
 def _session():
@@ -44,7 +43,7 @@ def _files(session):
     return out
 
 
-def _one(session, y, name, tmp):
+def _download(session, y, name, tmp):
     p = Path(tmp) / name
     for attempt in range(4):
         try:
@@ -55,8 +54,12 @@ def _one(session, y, name, tmp):
             if attempt == 3:
                 raise
     p.write_bytes(r.content)
+    return p
+
+
+def _subset(p):
     try:
-        with _READ, xr.open_dataset(p) as d:
+        with xr.open_dataset(p) as d:
             return d[VARS].sel(**BOX).load()
     finally:
         p.unlink(missing_ok=True)
@@ -79,10 +82,10 @@ def run(workers=4):
         tmp.replace(OUT)
 
     with tempfile.TemporaryDirectory(dir=C.RAW) as tmp, ThreadPoolExecutor(workers) as ex:
-        futs = [ex.submit(_one, s, y, n, tmp) for y, n in todo]
+        futs = [ex.submit(_download, s, y, n, tmp) for y, n in todo]
         for k, fu in enumerate(as_completed(futs), 1):
             try:
-                parts.append(fu.result())
+                parts.append(_subset(fu.result()))
             except Exception as e:  # logged; fetched again on the next run
                 print(f"  FAILED month: {e!r}"[:300], flush=True)
             if k % 20 == 0 or k == len(futs):
