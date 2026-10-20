@@ -1,0 +1,25 @@
+cff-version: 1.2.0
+message: "If you use this dataset, please cite it as below."
+type: dataset
+title: "Kuwait Dust and Soiling Atlas: monthly aerosol optical depth and relative PV soiling exposure, 2015 to present"
+version: 1.0.0
+authors:
+  - name: "Mizan Energy Engineering"
+    website: "https://mizan-energy.com"
+license: CC-BY-4.0
+repository-code: "https://github.com/ahmedelshazly27/mizan-kuwait-dust-atlas"
+url: "https://mizan-energy.com/research/kuwait-dust-atlas"
+keywords:
+  - aerosol optical depth
+  - MAIAC
+  - MCD19A2
+  - dust
+  - photovoltaic soiling
+  - Kuwait
+  - AERONET
+abstract: >-
+  Monthly mean aerosol optical depth at 550 nm over Kuwait on a 0.01 degree
+  grid, derived from MODIS MAIAC (MCD19A2 C6.1), with a 2015-2025
+  climatology, a simple relative soiling-exposure index, and validation
+  against AERONET Level 2.0 at Shagaya Park and Kuwait University. Code is
+  MIT licensed; data are CC BY 4.0.

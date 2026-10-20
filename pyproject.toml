@@ -1,0 +1,38 @@
+[project]
+name = "kda"
+version = "1.0.0"
+license = "MIT"
+description = "Kuwait Dust and Soiling Atlas: monthly aerosol optical depth and a relative PV soiling-exposure index over Kuwait"
+authors = [
+    { name = "Mizan Energy Engineering" }
+]
+requires-python = ">=3.13"
+dependencies = [
+    "earthaccess==0.19.0",
+    "geopandas==1.2.0",
+    "netcdf4==1.7.5",
+    "numpy==2.5.4",
+    "pandas==3.0.6",
+    "pillow==13.0.0",
+    "pyarrow==26.0.0",
+    "pyhdf==0.11.7",
+    "pyproj==3.8.0",
+    "rasterio==1.5.2",
+    "requests==2.34.2",
+    "rioxarray==0.23.0",
+    "scipy==1.18.1",
+    "shapely==2.2.0",
+    "xarray==2026.9.0",
+]
+
+[build-system]
+requires = ["uv_build>=0.11.32,<0.12.0"]
+build-backend = "uv_build"
+
+[dependency-groups]
+dev = [
+    "pytest==8.4.2",
+]
+
+[project.scripts]
+kda = "kda.cli:main"
