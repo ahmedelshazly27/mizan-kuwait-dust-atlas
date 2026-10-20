@@ -2,7 +2,7 @@
 
 import argparse
 
-STAGES = ["fetch"]
+STAGES = ["fetch", "maiac", "products", "validate", "manifest"]
 
 
 def run(stage):
@@ -10,6 +10,23 @@ def run(stage):
         from . import fetch_open
 
         fetch_open.all_open()
+    elif stage == "maiac":
+        from . import maiac
+
+        maiac.run()
+    elif stage == "products":
+        from . import maiac, products
+
+        products.export(maiac.load_daily())
+    elif stage == "validate":
+        from . import maiac, sitemonthly, validate
+
+        sites = maiac.load_sites()
+        validate.run(sites, sitemonthly.from_sites(sites))
+    elif stage == "manifest":
+        from . import products
+
+        products.manifest()
 
 
 def main(argv=None):
