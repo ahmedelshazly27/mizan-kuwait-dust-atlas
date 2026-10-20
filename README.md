@@ -45,6 +45,7 @@ accepted. Every stage resumes where it stopped.
 | `products` | Corrected MERRA-2 product, index, all download files | 1 min |
 | `research` | MAIAC 1 km research layer | 2 min |
 | `validate` | Validation tables and summaries | 1 min |
+| `web` | Compact JSON and GeoJSON for the atlas page (`data/web/`) | 1 min |
 | `manifest` | SHA-256 of every output and raw input | 1 min |
 
 ## Method

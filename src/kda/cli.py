@@ -3,7 +3,7 @@
 import argparse
 import json
 
-STAGES = ["fetch", "maiac", "merra2", "s5p", "products", "research", "validate", "manifest"]
+STAGES = ["fetch", "maiac", "merra2", "s5p", "products", "research", "validate", "web", "manifest"]
 
 
 def run(stage):
@@ -44,6 +44,10 @@ def run(stage):
         validate.monthly_report(merra2.at_sites(), cal["slope"], cal["intercept"], "merra2")
         sites = maiac.load_sites()
         validate.run(sites, sitemonthly.from_sites(sites), label="maiac")
+    elif stage == "web":
+        from . import web
+
+        web.build()
     elif stage == "manifest":
         from . import products
 
