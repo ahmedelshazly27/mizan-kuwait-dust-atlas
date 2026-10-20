@@ -6,8 +6,8 @@ downloads them into `data/raw/`.
 
 | Source | Used for | Terms | In this dataset |
 |---|---|---|---|
-| MODIS MAIAC MCD19A2 C6.1, 1 km daily AOD (Lyapustin & Wang, 2022, doi:10.5067/MODIS/MCD19A2.061), via NASA LAADS DAAC | The AOD itself | NASA EOSDIS data: no restrictions on use or redistribution; citation requested | Derived monthly grids only. Raw granules are linked, not copied (about 120 GB). |
-| MERRA-2 M2TMNXAER, monthly aerosol diagnostics (GMAO, 2015, doi:10.5067/FH9A0MLJPC7N), via GES DISC | Evaluated against MAIAC when choosing the AOD source | NASA EOSDIS data: no restrictions; citation requested | Evaluation statistics only |
+| MERRA-2 M2TMNXAER, monthly aerosol diagnostics (GMAO, 2015, doi:10.5067/FH9A0MLJPC7N; aerosol system: Randles et al., 2017, doi:10.1175/JCLI-D-16-0609.1), via NASA GES DISC | **The atlas AOD** (total AOD 550 nm, corrected against AERONET) | NASA EOSDIS data: no restrictions on use or redistribution; citation requested | Corrected monthly values on the native grid, cut to Kuwait. Raw files linked, not copied. |
+| MODIS MAIAC MCD19A2 C6.1, 1 km daily AOD (Lyapustin & Wang, 2022, doi:10.5067/MODIS/MCD19A2.061); file lists from NASA LAADS DAAC, files from NASA LP DAAC | Evaluated as the AOD source and rejected (see README); published as a research layer | NASA EOSDIS data: no restrictions on use or redistribution; citation requested | Corrected monthly 1 km research layer. Raw granules linked, not copied (about 120 GB). |
 | Sentinel-5P TROPOMI UV aerosol index (L2 AER_AI), via GES DISC | Independent cross-check, mid-2018 onward | Copernicus Sentinel data, free and open; attribution required: "Contains modified Copernicus Sentinel data [year]" | Cross-check statistics only |
 | AERONET Version 3 Level 2.0 direct-sun AOD (Giles et al., 2019, doi:10.5194/amt-12-169-2019) | Ground truth for validation | Public domain. AERONET asks users to inform the site PI and acknowledge the site, see below | Match-up pairs (station AOD next to satellite AOD) with acknowledgement. Raw station files are linked. |
 | NASA POWER monthly all-sky GHI | Irradiance context in the area panel | Open, no restrictions; acknowledgement requested | Monthly values per governorate |
@@ -33,7 +33,7 @@ and Kuwait University AERONET sites.
 
 ## Required acknowledgements, combined
 
-Aerosol optical depth from MODIS MAIAC (MCD19A2 C6.1), NASA LAADS DAAC.
+Aerosol optical depth from MERRA-2 (NASA GMAO), via NASA GES DISC; research layer from MODIS MAIAC (MCD19A2 C6.1), NASA LP DAAC.
 Ground observations from AERONET (NASA GSFC). Contains modified Copernicus
 Sentinel data (2018-2026). Irradiance from the NASA Langley Research Center
 POWER Project. Boundaries from Natural Earth.

@@ -147,3 +147,42 @@ def run(sat_sites, sat_monthly_by_site, label="maiac"):
     pd.concat(allmon).astype({"month": str}).to_csv(od / f"{label}_aeronet_monthly.csv", index=False, float_format="%.4f")
     (od / f"{label}_validation_summary.json").write_text(json.dumps(summary, indent=1))
     return summary
+
+
+def monthly_report(sat_monthly_by_site, slope, intercept, label):
+    """Validation of a corrected monthly product: pairs for the scatter plot,
+    scores overall, by season and by AOD level, and the worst months."""
+    from .calibrate import FIT_SITE, apply
+
+    pairs = []
+    for site in C.AERONET_SITES:
+        if site not in sat_monthly_by_site:
+            continue
+        j = monthly_at_site(sat_monthly_by_site[site], site)
+        if len(j) < 3:
+            continue
+        j["product_aod"] = apply(j.sat_aod, slope, intercept).round(4)
+        j["used_in_fit"] = site == FIT_SITE
+        pairs.append(j.rename(columns={"sat_aod": "raw_aod"}))
+    p = pd.concat(pairs, ignore_index=True)
+    p["month"] = p.month.astype(str)
+    p["season"] = pd.to_datetime(p.month).dt.month.map(SEASONS)
+    p["error"] = (p.product_aod - p.aeronet_aod).round(4)
+    summary = {}
+    for site, g in p.groupby("site"):
+        b = pd.cut(g.aeronet_aod, [0, 0.25, 0.4, np.inf], labels=["<0.25", "0.25-0.4", ">0.4"])
+        summary[site] = dict(
+            used_in_fit=bool(g.used_in_fit.iloc[0]),
+            period=[g.month.min(), g.month.max()],
+            all=stats(g.product_aod, g.aeronet_aod),
+            by_season={k: stats(x.product_aod, x.aeronet_aod) for k, x in g.groupby("season")},
+            by_aeronet_aod={str(k): stats(x.product_aod, x.aeronet_aod) for k, x in g.groupby(b, observed=True)},
+            worst_months=g.reindex(g.error.abs().sort_values(ascending=False).index)
+                         .head(5)[["month", "aeronet_aod", "product_aod", "error"]].to_dict("records"),
+        )
+    od = C.OUT / "validation"
+    od.mkdir(parents=True, exist_ok=True)
+    p[["site", "month", "season", "aeronet_aod", "raw_aod", "product_aod", "error", "used_in_fit"]].to_csv(
+        od / f"{label}_monthly_validation_pairs.csv", index=False)
+    (od / f"{label}_monthly_validation_summary.json").write_text(json.dumps(summary, indent=1, default=float))
+    return p, summary

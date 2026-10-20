@@ -11,7 +11,6 @@ Sentinel data licence accepted on that Earthdata account.
 
 import re
 import tempfile
-import threading
 import time
 from pathlib import Path
 
@@ -28,7 +27,6 @@ START = "2018-05-01"  # first full month of the record
 QA_MIN = 0.8  # product user manual recommendation for the aerosol index
 RES = 0.1  # TROPOMI pixels are 3.5 x 5.5 km; a 0.1 degree grid is about right
 OUT = C.INTERIM / "s5p_aai_monthly_0p1.nc"
-_READ = threading.Lock()
 
 
 def axes():
@@ -64,7 +62,7 @@ def _wait(s, job):
 
 
 def _grid_file(path, sums, counts, day_index):
-    with _READ, xr.open_dataset(path, group="PRODUCT") as d:
+    with xr.open_dataset(path, group="PRODUCT") as d:
         ai = d["aerosol_index_354_388"].values.squeeze()
         qa = d["qa_value"].values.squeeze()
         lat = d["latitude"].values.squeeze()
@@ -78,27 +76,36 @@ def _grid_file(path, sums, counts, day_index):
     np.add.at(counts[day_index], (row[inside], col[inside]), 1)
 
 
-def month(s, m):
-    """Monthly mean of daily-mean aerosol index on the 0.1 degree grid."""
+def fetch_month(s, m, tmp):
+    """Run one month's Harmony job and download its files. Network only, no file reading."""
     t0 = pd.Timestamp(m)
     t1 = t0 + pd.offsets.MonthEnd(0) + pd.Timedelta(hours=23, minutes=59, seconds=59)
     job = _wait(s, _submit(s, t0.strftime("%Y-%m-%dT%H:%M:%SZ"), t1.strftime("%Y-%m-%dT%H:%M:%SZ")))
     if job["status"] not in ("successful", "complete_with_errors"):
         raise RuntimeError(f"Harmony job {job['jobID']} {job['status']}: {job.get('message')}")
+    d = Path(tmp) / f"{t0:%Y%m}"
+    d.mkdir()
+    paths = []
+    for href in (l["href"] for l in job.get("links", []) if l.get("rel") == "data"):
+        p = d / href.rsplit("/", 1)[-1]
+        r = s.get(href, timeout=600)
+        r.raise_for_status()
+        p.write_bytes(r.content)
+        paths.append(p)
+    return t0, paths
+
+
+def grid_month(t0, paths):
+    """Monthly mean of daily-mean aerosol index on the 0.1 degree grid."""
     lonax, latax = axes()
-    nd = t1.day
+    nd = (t0 + pd.offsets.MonthEnd(0)).day
     sums = np.zeros((nd, latax.size, lonax.size))
     counts = np.zeros_like(sums)
-    links = [l["href"] for l in job.get("links", []) if l.get("rel") == "data"]
-    with tempfile.TemporaryDirectory(dir=C.RAW) as tmp:
-        for href in links:
-            name = href.rsplit("/", 1)[-1]
-            p = Path(tmp) / name
-            p.write_bytes(s.get(href, timeout=600).content)
-            # Orbit start time follows the product name: ..._L2__AER_AI_YYYYMMDDTHHMMSS_...
-            day = int(re.search(r"AER_AI_(\d{8})T", name).group(1)[6:8])
-            _grid_file(p, sums, counts, day - 1)
-            p.unlink()
+    for p in paths:
+        # Orbit start time follows the product name: ..._AER_AI_YYYYMMDDTHHMMSS_...
+        day = int(re.search(r"AER_AI_(\d{8})T", p.name).group(1)[6:8])
+        _grid_file(p, sums, counts, day - 1)
+        p.unlink()
     with np.errstate(invalid="ignore"):
         daily = np.where(counts > 0, sums / counts, np.nan)
         ndays = np.isfinite(daily).sum(0)
@@ -109,22 +116,29 @@ def month(s, m):
     ).expand_dims(time=[t0])
 
 
-def run(end=None):
+def run(end=None, workers=8):
+    """Every complete month not already in OUT. Harmony jobs run in parallel;
+    every netCDF read and write happens in this (main) thread."""
+    from concurrent.futures import ThreadPoolExecutor, as_completed
+
     s = _session()
     parts = [xr.open_dataset(OUT).load()] if OUT.exists() else []
     done = set(pd.to_datetime(parts[0].time.values)) if parts else set()
-    last = (pd.Timestamp(end) if end else pd.Timestamp.today()).normalize() - pd.offsets.MonthBegin(1)
+    last = ((pd.Timestamp(end) if end else pd.Timestamp.today()).to_period("M") - 1).to_timestamp()
     todo = [m for m in pd.date_range(START, last, freq="MS") if m not in done]
     print(f"S5P: {len(todo)} months to fetch", flush=True)
-    for k, m in enumerate(todo, 1):
-        try:
-            parts.append(month(s, m))
-        except Exception as e:  # logged; fetched again on the next run
-            print(f"  FAILED {m:%Y-%m}: {e!r}"[:300], flush=True)
-            continue
-        OUT.parent.mkdir(parents=True, exist_ok=True)
-        tmp = OUT.with_suffix(".tmp.nc")
-        xr.concat(parts, "time").sortby("time").to_netcdf(tmp)
-        tmp.replace(OUT)
-        print(f"  {m:%Y-%m} done ({k}/{len(todo)})", flush=True)
+    with tempfile.TemporaryDirectory(dir=C.RAW) as tmp, ThreadPoolExecutor(workers) as ex:
+        futs = {ex.submit(fetch_month, s, m, tmp): m for m in todo}
+        for k, fu in enumerate(as_completed(futs), 1):
+            m = futs[fu]
+            try:
+                parts.append(grid_month(*fu.result()))
+            except Exception as e:  # logged; fetched again on the next run
+                print(f"  FAILED {m:%Y-%m}: {e!r}"[:300], flush=True)
+                continue
+            OUT.parent.mkdir(parents=True, exist_ok=True)
+            tmpf = OUT.with_suffix(".tmp.nc")
+            xr.concat(parts, "time").sortby("time").to_netcdf(tmpf)
+            tmpf.replace(OUT)
+            print(f"  {m:%Y-%m} done ({k}/{len(todo)})", flush=True)
     return xr.open_dataset(OUT)
